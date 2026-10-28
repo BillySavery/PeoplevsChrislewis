@@ -552,4 +552,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   await mkdir(new URL("../site/", import.meta.url), { recursive: true });
   await writeFile(new URL("../site/data.json", import.meta.url), JSON.stringify(out));
   console.log(`Scored ${out.managers.length} managers up to GW${out.meta.gw} -> site/data.json`);
+  if (process.env.GITHUB_ACTIONS) {
+    const c = out.court;
+    console.log(c.found
+      ? `::notice title=Courtroom::Defendant matched to ${c.name} (${c.team}). Verdict: ${c.outcome}, ${c.counts.length} counts.`
+      : `::warning title=Courtroom::No manager matching "${c.name}" found in the league.`);
+    console.log(`::notice title=League::${out.meta.leagueName}, ${out.managers.length} managers, GW${out.meta.gw}.`);
+  }
 }
