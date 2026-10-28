@@ -317,7 +317,7 @@ dialog::backdrop { background: rgba(20, 28, 42, 0.7); }
   background: repeating-linear-gradient(to top, #c4ccd8 0 1px, transparent 1px 12px), #dfe3ea;
   border: 3px solid #fff;
 }
-.mug img { display: block; width: 100%; height: 128px; object-fit: cover; object-position: 50% 25%; mix-blend-mode: multiply; }
+.mug img { display: block; width: 100%; height: 128px; object-fit: cover; object-position: 50% 25%; }
 .mug figcaption { background: var(--ink); color: #fff; font: 500 11px/1 var(--body); text-align: center; padding: 4px 0; letter-spacing: 0.04em; }
 .fav-photo { grid-row: 1 / span 3; grid-column: 1; width: 92px; height: 92px; border-radius: 50%; object-fit: cover; object-position: 50% 30%; border: 3px solid #fff; }
 .favourite button:has(.fav-photo) { grid-template-columns: auto 1fr auto; }
