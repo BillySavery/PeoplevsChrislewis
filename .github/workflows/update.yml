@@ -35,6 +35,9 @@ jobs:
       - name: Calculate fraud scores
         run: node scripts/score.mjs data/raw.json
 
+      - name: Stamp files so phones load the latest version
+        run: sed -i "s/__BUILD__/${{ github.run_id }}/g" site/index.html
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

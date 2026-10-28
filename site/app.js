@@ -60,7 +60,7 @@ let data;
 let current = "fraud";
 
 async function init() {
-  const res = await fetch("data.json", { cache: "no-store" });
+  const res = await fetch(`data.json?v=${Date.now()}`, { cache: "no-store" });
   if (!res.ok) {
     $("#sub").textContent = "No data yet. Run the update job in GitHub Actions to load your league.";
     return;
