@@ -59,4 +59,4 @@ npm run serve    # open the site at http://localhost:3000
 
 * Transfer regret compares total points of the two players each week, whether or not they started.
 * Expected points use the official FPL expected goals and assists, with goals worth 10 (GK), 6 (DEF), 5 (MID) and 4 (FWD), and assists worth 3.
-* Not affiliated with the Premier League or FPL. All accusations are made in jest.
+* Not affiliated with the Premier League or FPL.

@@ -70,7 +70,7 @@ async function init() {
   document.title = `${meta.siteTitle || "FPL Fraud Detector"}: ${meta.leagueName}`;
   $("#sub").textContent = `${meta.leagueName}. Case files updated after gameweek ${meta.gw}.`;
   $("#demo").hidden = !meta.demo;
-  $("#foot").textContent = `League ${meta.leagueId}. Last refreshed ${new Date(meta.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}. Not affiliated with the Premier League. All accusations are made in jest.`;
+  $("#foot").textContent = `League ${meta.leagueId}. Last refreshed ${new Date(meta.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}. Not affiliated with the Premier League.`;
   renderLineup();
   renderCharges();
   renderTabs();
