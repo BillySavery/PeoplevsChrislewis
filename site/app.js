@@ -115,9 +115,13 @@ async function init() {
   if (hash) openDossier(+hash[1]);
 }
 
-function figureSvg() {
-  return `<span class="head"></span><span class="torso"><span class="tag"></span></span>`;
+function figureSvg(m) {
+  const head = m?.photo
+    ? `<img class="head photo" src="${esc(m.photo)}" alt="">`
+    : `<span class="head"></span>`;
+  return `${head}<span class="torso"><span class="tag"></span></span>`;
 }
+const avatar = (m) => (m.photo ? `<img class="avatar" src="${esc(m.photo)}" alt="">` : "");
 
 function renderLineup() {
   const top = [...data.managers].sort((a, b) => b.fraud.prob - a.fraud.prob).slice(0, 5);
@@ -126,7 +130,7 @@ function renderLineup() {
   $("#suspects").innerHTML = top.map((m) => {
     const h = Math.max(18, m.fraud.prob);
     return `<button class="suspect" data-id="${m.id}" aria-label="${esc(m.team)}, ${esc(m.manager)}, ${m.fraud.prob}% fraud probability">
-      <div class="figure" style="height:calc(${h}% - 30px)">${figureSvg()}</div>
+      <div class="figure" style="height:calc(${h}% - 30px)">${figureSvg(m)}</div>
       <div class="plate ${m.fraud.prob >= 70 ? "hot" : ""}">${m.fraud.prob}%</div>
     </button>`;
   }).join("");
@@ -157,6 +161,7 @@ function renderForfeit() {
   const rem = fav.forfeit.remaining;
   $("#favourite").innerHTML = `
     <button data-id="${fav.id}">
+      ${fav.photo ? `<img class="fav-photo" src="${esc(fav.photo)}" alt="">` : ""}
       <span class="fav-label">Current favourite</span>
       <span class="fav-name">${esc(fav.manager)}</span>
       <span class="fav-team">${esc(fav.team)}, ${ordinal(fav.rank)} on ${fav.total} points</span>
@@ -166,7 +171,7 @@ function renderForfeit() {
   $("#forfeit-table tbody").innerHTML = rows.map((m, i) => `
     <tr data-id="${m.id}">
       <td class="pos">${i + 1}</td>
-      <td class="mgr"><button><span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)} in league</span></button></td>
+      <td class="mgr"><button>${avatar(m)}<span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)} in league</span></button></td>
       <td class="num">${m.forfeit.last < 0.5 && m.forfeit.last > 0 ? "<1" : Math.round(m.forfeit.last)}%</td>
       <td class="bar-col"><div class="bar hot"><i style="left:0;width:${(m.forfeit.last / max) * 100}%"></i></div></td>
       <td class="num b3-col">${m.forfeit.bottom3}%</td>
@@ -215,7 +220,7 @@ function renderTable() {
     }
     return `<tr data-id="${m.id}">
       <td class="pos">${i + 1}</td>
-      <td class="mgr"><button><span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)} in league</span></button></td>
+      <td class="mgr"><button>${avatar(m)}<span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)} in league</span></button></td>
       <td class="num">${ix.show(m)}</td>
       <td class="bar-col">${bar}</td>
       <td class="detail-col">${esc(ix.detail(m))}</td>
@@ -259,7 +264,8 @@ function openDossier(id) {
   const caps = [...(m.luck.captainLog || [])].sort((a, b) => a.gw - b.gw);
 
   $("#dossier-body").innerHTML = `
-    <div class="dossier-head">
+    <div class="dossier-head${m.photo ? " has-mug" : ""}">
+      ${m.photo ? `<figure class="mug"><img src="${esc(m.photo)}" alt="Mugshot of ${esc(m.manager)}"><figcaption>${m.id}</figcaption></figure>` : ""}
       <h3 id="dossier-title">${esc(m.team)}</h3>
       <p>${esc(m.manager)}. ${ordinal(m.rank)} in the league on ${m.total} points. Case number ${m.id}.</p>
       <span class="stamp ${hot ? "hot" : ""}">${stamp}</span>

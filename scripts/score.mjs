@@ -620,7 +620,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   raw.fixtureLookahead = config.fixtureLookahead;
   const out = score(raw);
   out.meta.siteTitle = config.siteTitle;
+  // Mugshots: match config keys against team or manager names
+  const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const photoMatches = [];
+  for (const [key, file] of Object.entries(config.mugshots || {})) {
+    const k = norm(key);
+    const hit = out.managers.find((m) => norm(m.team) === k || norm(m.manager) === k) ||
+      out.managers.find((m) => norm(m.team).includes(k) || norm(m.manager).includes(k));
+    if (hit) { hit.photo = file; photoMatches.push(`${key} -> ${hit.manager} (${hit.team})`); }
+    else photoMatches.push(`${key} -> no match`);
+  }
   out.court = buildCourt(out.managers, config.defendant, out.meta.gw);
+  if (out.court.found) out.court.photo = out.managers.find((m) => m.id === out.court.id)?.photo || null;
   await mkdir(new URL("../site/", import.meta.url), { recursive: true });
   await writeFile(new URL("../site/data.json", import.meta.url), JSON.stringify(out));
   console.log(`Scored ${out.managers.length} managers up to GW${out.meta.gw} -> site/data.json`);
@@ -631,6 +642,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       : `::warning title=Courtroom::No manager matching "${c.name}" found in the league.`);
     const fav = [...out.managers].sort((a, b) => b.forfeit.last - a.forfeit.last).slice(0, 3);
     console.log(`::notice title=Forfeit::${fav.map((m) => `${m.manager} ${m.forfeit.last}%`).join(", ")}`);
+    console.log(`::notice title=Mugshots::${photoMatches.join("; ") || "none configured"}`);
     console.log(`::notice title=League::${out.meta.leagueName}, ${out.managers.length} managers, GW${out.meta.gw}.`);
   }
 }

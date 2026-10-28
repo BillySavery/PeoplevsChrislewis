@@ -25,6 +25,13 @@ async function init() {
   document.title = `The People v ${c.name}`;
   $("#title").textContent = `The People v ${c.name}`;
   $("#case").textContent = `Case ${c.caseNo}. The defendant manages ${c.team} and sits ${ordinal(c.rank)} in the league on ${c.total} points.`;
+  if (c.photo) {
+    const img = document.createElement("img");
+    img.className = "court-mug";
+    img.src = c.photo;
+    img.alt = `Mugshot of ${c.name}`;
+    $(".court-board .board-inner").prepend(img);
+  }
   const stamp = $("#stamp");
   stamp.hidden = false;
   stamp.textContent = c.outcome;

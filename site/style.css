@@ -306,3 +306,30 @@ dialog::backdrop { background: rgba(20, 28, 42, 0.7); }
 @media (max-width: 420px) {
   .b3-col { display: none; }
 }
+
+/* ---------- Mugshots ---------- */
+.head.photo { width: min(64px, 56%); height: auto; aspect-ratio: 1; object-fit: cover; object-position: 50% 30%; border: 2px solid #33445f; background: #33445f; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: 50% 30%; grid-row: 1 / span 2; align-self: center; }
+.rank-table .mgr button:has(.avatar) { display: grid; grid-template-columns: 34px 1fr; column-gap: 10px; }
+.dossier-head.has-mug { padding-left: 150px; min-height: 170px; }
+.mug {
+  position: absolute; left: 24px; top: 22px; margin: 0; width: 106px;
+  background: repeating-linear-gradient(to top, #c4ccd8 0 1px, transparent 1px 12px), #dfe3ea;
+  border: 3px solid #fff;
+}
+.mug img { display: block; width: 100%; height: 128px; object-fit: cover; object-position: 50% 25%; mix-blend-mode: multiply; }
+.mug figcaption { background: var(--ink); color: #fff; font: 500 11px/1 var(--body); text-align: center; padding: 4px 0; letter-spacing: 0.04em; }
+.fav-photo { grid-row: 1 / span 3; grid-column: 1; width: 92px; height: 92px; border-radius: 50%; object-fit: cover; object-position: 50% 30%; border: 3px solid #fff; }
+.favourite button:has(.fav-photo) { grid-template-columns: auto 1fr auto; }
+.favourite button:has(.fav-photo) .fav-label,
+.favourite button:has(.fav-photo) .fav-name,
+.favourite button:has(.fav-photo) .fav-team { grid-column: 2; }
+.favourite button:has(.fav-photo) .fav-odds { grid-column: 3; }
+.court-mug { float: right; width: 150px; height: 190px; object-fit: cover; object-position: 50% 25%; border: 4px solid #fff; margin: 20px 0 0 20px; }
+@media (max-width: 720px) {
+  .dossier-head.has-mug { padding-left: 24px; padding-top: 160px; }
+  .mug { width: 96px; }
+  .mug img { height: 112px; }
+  .court-mug { width: 96px; height: 122px; margin-top: 40px; }
+  .fav-photo { width: 64px; height: 64px; }
+}

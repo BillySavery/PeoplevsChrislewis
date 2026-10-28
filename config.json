@@ -2,5 +2,8 @@
   "leagueId": 566171,
   "siteTitle": "The FPL Fraud Detector",
   "fixtureLookahead": 4,
-  "defendant": "Chris Lewis"
+  "defendant": "Chris Lewis",
+  "mugshots": {
+    "3peat": "mugshots/3peat.jpg"
+  }
 }
