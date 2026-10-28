@@ -11,7 +11,7 @@ A reputation system for every manager in our FPL mini league (league `566171`). 
 | **Transfer regret** | Points lost compared with keeping the player they sold, from the week of the transfer until the new player was sold again. Hits included. |
 | **Benchwarmer crimes** | Points left on the bench. Bench Boost weeks excused. Includes their single worst benching. |
 | **Overachiever alert** | Actual starting XI points minus expected points (real goals and assists swapped for expected goals and assists). |
-| **AI suspicion** | Banter only. Template ownership, copying the most popular captain, never taking hits, transfers that always land, and no previous seasons. |
+| **AI suspicion** | Template ownership, copying the most popular captain, never taking hits, transfers that always land, and no previous seasons. |
 
 Previous seasons come from each manager's FPL history (final points and overall rank per season) and feed the fraud probability and each manager's rap sheet.
 

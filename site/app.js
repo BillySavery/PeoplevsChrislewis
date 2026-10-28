@@ -41,7 +41,7 @@ const INDEXES = [
   },
   {
     key: "ai", label: "AI suspicion", unit: "%",
-    desc: "For banter only. Nobody can actually tell. Scores template ownership, copying the most popular captain, never taking hits, suspiciously good transfers and having no previous seasons.",
+    desc: "Likelihood this team is being picked with help from an AI tool. Our model checks every decision against the patterns AI built squads leave behind: template ownership, always copying the most popular captain, never taking hits, transfers that land too often, and brand new accounts with no history.",
     value: (m) => m.ai.score, show: (m) => `${m.ai.score}%`,
     detail: (m) => m.ai.tells[0] || "Seems to be thinking for themselves",
   },
@@ -209,7 +209,7 @@ function openDossier(id) {
         <div><dt>Transfer regret</dt><dd>${fmt(m.transfers.regret)}<small>${m.transfers.count} transfers, ${m.transfers.hits} pts in hits</small></dd></div>
         <div><dt>Benchwarmer crimes</dt><dd>${m.bench.total}<small>points left on the bench</small></dd></div>
         <div><dt>Overachiever alert</dt><dd>${fmt(m.over.diff)}<small>${m.over.actual} actual, ${m.over.expected} expected</small></dd></div>
-        <div><dt>AI suspicion</dt><dd>${m.ai.score}%<small>banter only</small></dd></div>
+        <div><dt>AI suspicion</dt><dd>${m.ai.score}%<small>detection confidence</small></dd></div>
       </dl>
     </div>
     ${m.fraud.reasons.length ? `<div class="dossier-section"><h4>Why they might collapse</h4><ul class="reasons">${m.fraud.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>` : ""}
