@@ -72,6 +72,7 @@ const INDEXES = [
 ];
 
 const CHARGES = [
+  { key: "forfeit", text: "Favourite for the forfeit", val: (m) => `${m.forfeit.last}%` },
   { key: "fraud", text: "Most likely to collapse", val: (m) => `${m.fraud.prob}%` },
   { key: "luckiest", idx: "luck", text: "Luckiest bastard", val: (m) => `${m.luck.total} pts` },
   { key: "regret", text: "Most transfer regret", val: (m) => `${fmt(m.transfers.regret)} pts` },
@@ -106,6 +107,7 @@ async function init() {
   $("#foot").textContent = `League ${meta.leagueId}. Detection model 2.4. Last analysed ${new Date(meta.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}. Not affiliated with the Premier League.`;
   renderLineup();
   renderCharges();
+  renderForfeit();
   renderTabs();
   renderTable();
   renderMethod();
@@ -147,6 +149,38 @@ function renderCharges() {
     const b = e.target.closest("button[data-id]");
     if (b) openDossier(+b.dataset.id);
   });
+}
+
+function renderForfeit() {
+  const rows = [...data.managers].sort((a, b) => b.forfeit.last - a.forfeit.last || a.forfeit.projTotal - b.forfeit.projTotal);
+  const fav = rows[0];
+  const rem = fav.forfeit.remaining;
+  $("#favourite").innerHTML = `
+    <button data-id="${fav.id}">
+      <span class="fav-label">Current favourite</span>
+      <span class="fav-name">${esc(fav.manager)}</span>
+      <span class="fav-team">${esc(fav.team)}, ${ordinal(fav.rank)} on ${fav.total} points</span>
+      <span class="fav-odds">${fav.forfeit.last}%<small>chance of finishing last</small></span>
+    </button>`;
+  const max = Math.max(1, rows[0].forfeit.last);
+  $("#forfeit-table tbody").innerHTML = rows.map((m, i) => `
+    <tr data-id="${m.id}">
+      <td class="pos">${i + 1}</td>
+      <td class="mgr"><button><span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)} in league</span></button></td>
+      <td class="num">${m.forfeit.last < 0.5 && m.forfeit.last > 0 ? "<1" : Math.round(m.forfeit.last)}%</td>
+      <td class="bar-col"><div class="bar hot"><i style="left:0;width:${(m.forfeit.last / max) * 100}%"></i></div></td>
+      <td class="num b3-col">${m.forfeit.bottom3}%</td>
+      <td class="num proj-col">${m.forfeit.projTotal}</td>
+    </tr>`).join("");
+  $("#forfeit-note").textContent = rem > 0
+    ? `Based on 20,000 simulations of the remaining ${rem} gameweeks. Each manager's scoring rate is their season average adjusted for finishing luck against expected goals and their record from previous seasons. Updated after every gameweek.`
+    : "The season is over. The result is final.";
+  const open = (e) => {
+    const t = e.target.closest("[data-id]");
+    if (t) openDossier(+t.dataset.id);
+  };
+  $("#favourite").onclick = open;
+  $("#forfeit-table tbody").onclick = open;
 }
 
 function renderTabs() {
@@ -242,6 +276,7 @@ function openDossier(id) {
         <div><dt>Transfer regret</dt><dd>${fmt(m.transfers.regret)}<small>${m.transfers.count} transfers, ${m.transfers.hits} pts in hits</small></dd></div>
         <div><dt>Benchwarmer crimes</dt><dd>${m.bench.total}<small>points left on the bench</small></dd></div>
         <div><dt>Overachiever alert</dt><dd>${fmt(m.over.diff)}<small>${m.over.actual} actual, ${m.over.expected} expected</small></dd></div>
+        <div><dt>Forfeit odds</dt><dd>${m.forfeit.last}%<small>chance of finishing last, projected ${m.forfeit.projTotal} pts</small></dd></div>
         <div><dt>Ex back syndrome</dt><dd>${m.exBack.count}<small>players bought back</small></dd></div>
         <div><dt>Bottle job index</dt><dd>${m.bottle.drop}<small>${m.bottle.peakGw ? `peaked ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw}` : "places dropped"}</small></dd></div>
         <div><dt>Chip waster</dt><dd>${m.chipWaste.total}<small>points short on chips</small></dd></div>

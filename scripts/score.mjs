@@ -358,6 +358,7 @@ export function score(raw) {
     };
   });
 
+  forecast(managers, lastGw);
   for (const m of managers) m.verdict = verdict(m, managers);
 
   const by = (fn, dir = -1) => [...managers].sort((a, b) => dir * (fn(a) - fn(b)))[0];
@@ -372,6 +373,7 @@ export function score(raw) {
     bottle: pick(by((m) => m.bottle.drop * 100 - m.bottle.peak)),
     chipWaste: pick(by((m) => m.chipWaste.total)),
     coward: pick(by((m) => m.coward.pct * 100 + m.coward.matches)),
+    forfeit: pick(by((m) => m.forfeit.last * 1000 - m.forfeit.projTotal)),
   };
 
   return {
@@ -387,6 +389,75 @@ export function score(raw) {
     awards,
     managers,
   };
+}
+
+// ---------- Wooden spoon forecast ----------
+// Simulates the rest of the season many times and counts how often each
+// manager finishes last. Each manager's scoring rate is their season average,
+// shrunk towards the league average, corrected for finishing luck, and
+// nudged by their record from previous seasons.
+function forecast(managers, lastGw, seasonLength = 38, sims = 20000) {
+  const remaining = Math.max(0, seasonLength - lastGw);
+  let seed = 38 + lastGw * 7919 + managers.length;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const normal = () => {
+    let u = 0;
+    while (u === 0) u = rand();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+
+  const allWeeks = managers.flatMap((m) => m.gwPoints);
+  const leagueMean = mean(allWeeks) || 50;
+  const leagueSd = sd(allWeeks) || 15;
+
+  const model = managers.map((m) => {
+    const n = m.gwPoints.length || 1;
+    const avg = mean(m.gwPoints) || leagueMean;
+    const k = 6; // weeks of league average blended in
+    let mu = (n * avg + k * leagueMean) / (n + k);
+    mu -= 0.5 * (m.over.diff / n); // give back half the finishing luck
+    if (m.career.median) mu += clamp((5.8 - Math.log10(m.career.median)) * 1.5, -3, 3);
+    else mu -= 0.5;
+    const own = sd(m.gwPoints);
+    const weekSd = (n * own + k * leagueSd) / (n + k);
+    return { m, mu, weekSd };
+  });
+
+  const lastCount = new Array(managers.length).fill(0);
+  const bottom3 = new Array(managers.length).fill(0);
+  const posSum = new Array(managers.length).fill(0);
+  const totalSum = new Array(managers.length).fill(0);
+  const finals = new Array(managers.length);
+  const skillSd = 3; // uncertainty about each manager's true weekly rate
+
+  for (let s = 0; s < sims; s++) {
+    for (let i = 0; i < model.length; i++) {
+      const { m, mu, weekSd } = model[i];
+      const rate = mu + normal() * skillSd;
+      finals[i] = m.total + remaining * rate + Math.sqrt(remaining) * weekSd * normal();
+      totalSum[i] += finals[i];
+    }
+    const order = finals.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
+    order.forEach(([, i], pos) => {
+      posSum[i] += pos + 1;
+      if (pos === order.length - 1) lastCount[i]++;
+      if (pos >= order.length - 3) bottom3[i]++;
+    });
+  }
+
+  model.forEach(({ m, mu }, i) => {
+    m.forfeit = {
+      last: round((lastCount[i] / sims) * 100, 1),
+      bottom3: round((bottom3[i] / sims) * 100, 0),
+      projTotal: Math.round(totalSum[i] / sims),
+      projPos: round(posSum[i] / sims, 1),
+      rate: round(mu),
+      remaining,
+    };
+  });
+  const sortedProj = [...managers].sort((a, b) => a.forfeit.projTotal - b.forfeit.projTotal);
+  const safety = sortedProj[1]?.forfeit.projTotal ?? 0;
+  for (const m of managers) m.forfeit.gapToSafety = m.forfeit.projTotal - safety;
 }
 
 function pick(m) {
@@ -408,6 +479,7 @@ function verdict(m, all) {
   else if (m.fraud.prob <= 20) lines.push(`${first}'s results are poor, but the data indicates they are honestly poor.`);
   else lines.push(`${first} is performing broadly in line with expectations. No significant anomalies detected.`);
 
+  if (m.forfeit.last >= 25) lines.push(`The forecast model makes them a ${m.forfeit.last}% chance to finish last and face the forfeit.`);
   if (m.luck.captain >= 15) lines.push(`A large share of their points came from captain returns well above expected, most notably ${m.luck.luckiestMoment?.player} in GW${m.luck.luckiestMoment?.gw}.`);
   else if (m.luck.autosub >= 30) lines.push(`Automatic substitutions have contributed ${m.luck.autosub} points, unusually high for this league.`);
   if (m.exBack.count) lines.push(`Repurchased ${m.exBack.list[0].player} after previously selling him, a pattern flagged as Ex back syndrome.`);
@@ -557,6 +629,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(c.found
       ? `::notice title=Courtroom::Defendant matched to ${c.name} (${c.team}). Verdict: ${c.outcome}, ${c.counts.length} counts.`
       : `::warning title=Courtroom::No manager matching "${c.name}" found in the league.`);
+    const fav = [...out.managers].sort((a, b) => b.forfeit.last - a.forfeit.last).slice(0, 3);
+    console.log(`::notice title=Forfeit::${fav.map((m) => `${m.manager} ${m.forfeit.last}%`).join(", ")}`);
     console.log(`::notice title=League::${out.meta.leagueName}, ${out.managers.length} managers, GW${out.meta.gw}.`);
   }
 }
