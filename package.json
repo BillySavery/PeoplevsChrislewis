@@ -1,0 +1,15 @@
+{
+  "name": "fpl-fraud-detector",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reputation scores for every manager in an FPL mini league",
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs",
+    "score": "node scripts/score.mjs data/raw.json",
+    "update": "node scripts/fetch.mjs && node scripts/score.mjs data/raw.json",
+    "demo": "node scripts/mock.mjs && node scripts/score.mjs data/raw-demo.json",
+    "serve": "npx --yes serve site"
+  },
+  "engines": { "node": ">=20" }
+}

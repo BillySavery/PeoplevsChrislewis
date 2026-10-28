@@ -1,0 +1,52 @@
+name: Update league and deploy
+
+on:
+  # Every 6 hours, so new gameweeks appear without anyone touching it
+  schedule:
+    - cron: "17 */6 * * *"
+  # Run it by hand from the Actions tab
+  workflow_dispatch:
+  # Redeploy when the code changes
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch league data from FPL
+        run: node scripts/fetch.mjs
+
+      - name: Calculate fraud scores
+        run: node scripts/score.mjs data/raw.json
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
