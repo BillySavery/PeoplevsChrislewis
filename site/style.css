@@ -221,3 +221,64 @@ dialog::backdrop { background: rgba(20, 28, 42, 0.7); }
 @media (max-width: 420px) {
   .bar-col { display: none; }
 }
+
+/* ---------- Link to the courtroom ---------- */
+.court-link {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 18px;
+  padding: 10px 16px; background: var(--tape); color: var(--ink);
+  font-weight: 600; text-decoration: none; border-radius: 999px;
+}
+.court-link::before {
+  content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--alert);
+  box-shadow: 0 0 0 0 rgba(215, 38, 61, 0.6);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .court-link::before { animation: live 1.8s ease-out infinite; }
+}
+@keyframes live { 0% { box-shadow: 0 0 0 0 rgba(215,38,61,.6); } 100% { box-shadow: 0 0 0 10px rgba(215,38,61,0); } }
+.court-link:hover { background: #ffd84a; }
+.court-link[hidden] { display: none; }
+
+/* ---------- Courtroom ---------- */
+.court-board { padding-bottom: 36px; }
+.back { color: #c4cddb; font-size: 15px; }
+.court-of { font: italic 400 18px/1.4 "IBM Plex Serif", Georgia, serif; color: #c4cddb; margin: 28px 0 8px; }
+.court-board h1 { font: 400 clamp(42px, 8.5vw, 92px)/0.95 var(--display); margin: 0; max-width: 14ch; }
+.verdict-stamp {
+  display: inline-block; margin-top: 22px; padding: 8px 18px;
+  border: 4px solid #ff6b7d; color: #ff6b7d; font: 400 clamp(26px, 5vw, 40px)/1 var(--display);
+  transform: rotate(-3deg);
+}
+.verdict-stamp.hung { border-color: var(--tape); color: var(--tape); }
+@media (prefers-reduced-motion: no-preference) {
+  .verdict-stamp { animation: stampin 420ms cubic-bezier(.3,1.6,.5,1) 400ms both; }
+}
+@keyframes stampin { from { transform: rotate(-3deg) scale(2.2); opacity: 0; } to { transform: rotate(-3deg) scale(1); opacity: 1; } }
+
+.court section { max-width: 760px; }
+.court .lede { font-size: 17px; max-width: 62ch; }
+.counts { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
+.counts li { padding: 18px 0; border-bottom: 1px solid var(--rule); }
+.count-no { margin: 0; color: var(--muted); font: italic 400 16px/1.3 "IBM Plex Serif", Georgia, serif; }
+.counts h3 { font: 400 28px/1.1 var(--display); margin: 4px 0 8px; letter-spacing: 0.01em; }
+.evidence { margin: 0; font: 400 18px/1.6 "IBM Plex Serif", Georgia, serif; max-width: 62ch; }
+.finding { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+.finding strong { color: var(--alert); font-weight: 600; }
+.statements { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: none !important; }
+.statements > div { max-width: 60ch; }
+.statement { font: 400 18px/1.65 "IBM Plex Serif", Georgia, serif; margin: 0; }
+.jury { display: grid; grid-template-columns: repeat(6, 44px); gap: 10px; margin: 6px 0 14px; }
+.seat { width: 44px; height: 52px; border-radius: 22px 22px 6px 6px; }
+.seat.g { background: var(--alert); }
+.seat.n { background: #c3cad6; }
+.sentence-block { background: var(--card); border: 1px solid var(--rule); border-left: 6px solid var(--alert); padding: 24px !important; margin-top: 48px; }
+.sentence-block h2 { margin-bottom: 6px; }
+.outcome { font: 400 clamp(36px, 6vw, 56px)/1 var(--display); color: var(--alert); margin: 0 0 14px; }
+.sentence { margin: 18px 0 0; font-size: 18px; font-weight: 500; max-width: 62ch; }
+.sentence span { display: block; color: var(--muted); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+
+@media (max-width: 720px) {
+  .statements { grid-template-columns: 1fr; gap: 8px; }
+  .jury { grid-template-columns: repeat(6, 1fr); max-width: 330px; }
+  .seat { width: 100%; height: 44px; }
+}

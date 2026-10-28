@@ -17,8 +17,9 @@
       <div class="title-block">
         <h1>The FPL Fraud Detector</h1>
         <p class="sub" id="sub">Loading the case files</p>
+        <a class="court-link" id="court-link" href="court.html" hidden><span>Now in session</span></a>
       </div>
-      <p class="lineup-cap" id="lineup-cap">The lineup: most likely to collapse over the next few gameweeks. Height is fraud probability.</p>
+      <p class="lineup-cap" id="lineup-cap">The lineup: managers most likely to collapse over the next four gameweeks. Height shows fraud probability.</p>
       <div class="lineup" role="group" aria-labelledby="lineup-cap">
         <div class="heights" aria-hidden="true" id="heights"></div>
         <div class="suspects" id="suspects"></div>
@@ -51,9 +52,9 @@
     </section>
 
     <section class="method" aria-labelledby="method-h">
-      <h2 id="method-h">How the scores work</h2>
+      <h2 id="method-h">Methodology</h2>
       <dl id="method"></dl>
-      <p class="small">Data comes straight from the official FPL website and refreshes automatically. Expected goals and assists are the official FPL figures for each player.</p>
+      <p class="small">Data is pulled directly from the official FPL API and reanalysed several times a day. Expected goals and assists are the official FPL figures for each player. Scores are relative to the rest of this league.</p>
     </section>
   </main>
 

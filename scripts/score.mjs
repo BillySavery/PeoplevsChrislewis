@@ -89,6 +89,14 @@ export function score(raw) {
     });
   }
 
+  const leagueAvg = {};
+  for (const [gw, list] of Object.entries(totalsByGw)) leagueAvg[gw] = 0;
+  {
+    const per = {};
+    for (const s of standings) for (const h of entries[s.entry]?.history?.current || []) (per[h.event] ||= []).push(h.points);
+    for (const [gw, list] of Object.entries(per)) leagueAvg[gw] = mean(list);
+  }
+
   const managers = standings.map((s) => {
     const e = entries[s.entry] || {};
     const hist = e.history?.current || [];
@@ -107,6 +115,7 @@ export function score(raw) {
     let captainMatches = 0;
     let captainWeeks = 0;
     const captainLog = [];
+    const chipUses = [];
 
     for (const gw of gws) {
       const pk = e.picks?.[gw];
@@ -140,6 +149,21 @@ export function score(raw) {
       if (cap) {
         captainWeeks++;
         if (events.get(gw)?.most_captained === cap.element) captainMatches++;
+      }
+
+      // Chip outcomes
+      if (chip === "3xc") {
+        const extra = effCap ? pts(effCap, gw) : 0;
+        chipUses.push({ name: chip, gw, value: extra, benchmark: 10, player: effCap ? pname(effCap) : null,
+          text: `Triple Captain on ${effCap ? pname(effCap) : "a player who did not play"} returned ${extra} extra points` });
+      } else if (chip === "bboost") {
+        const benchIds = pk.picks.filter((p) => p.position > 11).map((p) => p.element);
+        const val = sum(benchIds.map((id) => pts(id, gw)));
+        chipUses.push({ name: chip, gw, value: val, benchmark: 12, text: `Bench Boost bench scored ${val} points` });
+      } else if (chip === "freehit") {
+        const h = histByGw.get(gw);
+        const diff = round((h?.points ?? 0) - (leagueAvg[gw] ?? 0));
+        chipUses.push({ name: chip, gw, value: diff, benchmark: 10, text: `Free Hit scored ${diff >= 0 ? diff + " above" : -diff + " below"} the league average` });
       }
 
       for (const id of lineup) {
@@ -182,6 +206,28 @@ export function score(raw) {
     const netGain = grossGain - hits;
     const sortedTx = [...tx].sort((a, b) => a.gain - b.gain);
 
+    // Wildcard: next three gameweeks against the league average
+    for (const c of chips.filter((c) => c.name === "wildcard")) {
+      const weeks = hist.filter((h) => h.event >= c.event && h.event < c.event + 3);
+      if (!weeks.length) continue;
+      const diff = round(sum(weeks.map((h) => h.points - (leagueAvg[h.event] ?? 0))));
+      chipUses.push({ name: "wildcard", gw: c.event, value: diff, benchmark: 5 * weeks.length,
+        text: `Wildcard team scored ${diff >= 0 ? diff + " above" : -diff + " below"} the league average over ${weeks.length} gameweeks` });
+    }
+    for (const c of chipUses) c.waste = round(Math.max(0, c.benchmark - c.value));
+    const worstChip = [...chipUses].sort((a, b) => b.waste - a.waste)[0] || null;
+
+    // Ex back syndrome: buying back a player they previously sold
+    const exes = [];
+    for (let i = 0; i < transfers.length; i++) {
+      const t = transfers[i];
+      const sold = transfers.slice(0, i).reverse().find((u) => u.element_out === t.element_in && u.event < t.event);
+      if (sold) {
+        exes.push({ player: pname(t.element_in), soldGw: sold.event, backGw: t.event,
+          soldFor: (sold.element_out_cost || 0) / 10, paid: (t.element_in_cost || 0) / 10 });
+      }
+    }
+
     // Latest squad for template and fixture checks
     const latestGw = Math.max(0, ...Object.keys(e.picks || {}).map(Number).filter((g) => e.picks[g]));
     const latest = e.picks?.[latestGw]?.picks || [];
@@ -201,6 +247,12 @@ export function score(raw) {
     const careerMedian = median(ranks);
 
     const posHistory = gws.map((gw) => leaguePos[s.entry]?.[gw] ?? null);
+    const known = posHistory.map((p, i) => [i + 1, p]).filter(([, p]) => p != null);
+    let peak = null;
+    // Ignore the first two gameweeks: early positions are mostly noise
+    const settled = known.filter(([gw]) => gw >= 3 || lastGw < 4);
+    for (const [gw, p] of settled) if (!peak || p < peak.pos) peak = { pos: p, gw };
+    const nowPos = known.length ? known[known.length - 1][1] : s.rank;
 
     return {
       id: s.entry,
@@ -243,6 +295,10 @@ export function score(raw) {
       },
       career: { seasons, best, median: careerMedian, rookie: seasons.length === 0 },
       captainConformity: captainWeeks ? round((captainMatches / captainWeeks) * 100, 0) : 0,
+      coward: { matches: captainMatches, weeks: captainWeeks, pct: captainWeeks ? round((captainMatches / captainWeeks) * 100, 0) : 0 },
+      chipWaste: { total: round(sum(chipUses.map((c) => c.waste))), uses: chipUses, worst: worstChip },
+      exBack: { count: exes.length, list: exes },
+      bottle: { peak: peak?.pos ?? s.rank, peakGw: peak?.gw ?? null, now: nowPos, drop: Math.max(0, nowPos - (peak?.pos ?? nowPos)) },
     };
   });
 
@@ -312,6 +368,10 @@ export function score(raw) {
     over: pick(by((m) => m.over.diff)),
     fraud: pick(by((m) => m.fraud.prob)),
     ai: pick(by((m) => m.ai.score)),
+    exBack: pick(by((m) => m.exBack.count * 100 + sum(m.exBack.list.map((x) => x.paid - x.soldFor)))),
+    bottle: pick(by((m) => m.bottle.drop * 100 - m.bottle.peak)),
+    chipWaste: pick(by((m) => m.chipWaste.total)),
+    coward: pick(by((m) => m.coward.pct * 100 + m.coward.matches)),
   };
 
   return {
@@ -342,19 +402,142 @@ function ordinal(n) {
 function verdict(m, all) {
   const first = m.manager.split(" ")[0];
   const lines = [];
-  if (m.fraud.prob >= 70) lines.push(`${first} is living on borrowed time. The numbers say this house of cards comes down soon.`);
-  else if (m.fraud.prob >= 50) lines.push(`${first} is skating on thin ice. Not a fraud yet, but under active investigation.`);
-  else if (m.fraud.prob <= 20 && m.rank <= Math.ceil(all.length / 3)) lines.push(`${first} is the real deal. Annoyingly, the underlying numbers back it up.`);
-  else if (m.fraud.prob <= 20) lines.push(`${first} is bad, but honestly bad. The points table is telling the truth.`);
-  else lines.push(`${first} is roughly where they deserve to be. Boring, but legitimate.`);
+  if (m.fraud.prob >= 70) lines.push(`${first}'s league position is not supported by the underlying data. The model expects a significant fall over the coming gameweeks.`);
+  else if (m.fraud.prob >= 50) lines.push(`${first} is showing several warning signs. The case remains open and will be reviewed after the next gameweek.`);
+  else if (m.fraud.prob <= 20 && m.rank <= Math.ceil(all.length / 3)) lines.push(`${first}'s results are consistent with genuine skill. No action recommended at this time.`);
+  else if (m.fraud.prob <= 20) lines.push(`${first}'s results are poor, but the data indicates they are honestly poor.`);
+  else lines.push(`${first} is performing broadly in line with expectations. No significant anomalies detected.`);
 
-  if (m.luck.captain >= 15) lines.push(`Captaincy luck has carried them, with ${m.luck.luckiestMoment?.player} in GW${m.luck.luckiestMoment?.gw} doing the heavy lifting.`);
-  else if (m.luck.autosub >= 30) lines.push(`Their bench keeps bailing them out: ${m.luck.autosub} points from automatic subs they never picked.`);
-  if (m.transfers.net <= -20) lines.push(`Their transfers have cost them ${-m.transfers.net} points. They should have just left the team alone.`);
-  else if (m.transfers.net >= 25) lines.push(`Transfers have gained ${m.transfers.net} points, which is either skill or a laptop doing the work.`);
-  if (m.bench.worst && m.bench.worst.pts >= 10) lines.push(`Benched ${m.bench.worst.player} for ${m.bench.worst.pts} points in GW${m.bench.worst.gw}. Unforgivable.`);
-  if (m.ai.score >= 70) lines.push(`AI suspicion is high. Someone check their browser history.`);
+  if (m.luck.captain >= 15) lines.push(`A large share of their points came from captain returns well above expected, most notably ${m.luck.luckiestMoment?.player} in GW${m.luck.luckiestMoment?.gw}.`);
+  else if (m.luck.autosub >= 30) lines.push(`Automatic substitutions have contributed ${m.luck.autosub} points, unusually high for this league.`);
+  if (m.exBack.count) lines.push(`Repurchased ${m.exBack.list[0].player} after previously selling him, a pattern flagged as Ex back syndrome.`);
+  if (m.bottle.drop >= 5) lines.push(`Has fallen from ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw} to ${ordinal(m.bottle.now)}.`);
+  if (m.transfers.net <= -20) lines.push(`Transfer activity has cost ${-m.transfers.net} points compared with simply holding.`);
+  else if (m.transfers.net >= 25) lines.push(`Transfer success is well above the rate we see in typical human managed teams.`);
+  if (m.chipWaste.worst && m.chipWaste.worst.waste >= 8) lines.push(`${m.chipWaste.worst.text} in GW${m.chipWaste.worst.gw}, a poor return on a chip.`);
+  if (m.bench.worst && m.bench.worst.pts >= 10) lines.push(`Left ${m.bench.worst.player} on the bench for ${m.bench.worst.pts} points in GW${m.bench.worst.gw}.`);
+  if (m.ai.score >= 70) lines.push(`AI usage indicators are elevated and this account has been flagged for further review.`);
   return lines.slice(0, 3).join(" ");
+}
+
+// ---------- The courtroom ----------
+const OFFENCES = [
+  { key: "fraud", title: "Fraudulent occupation of a league position", v: (m) => m.fraud.prob,
+    ev: (m) => `Fraud probability of ${m.fraud.prob}%. ${m.fraud.reasons[0] || ""}`,
+    sentence: "Placed on probation. The court expects regression to the mean and will be monitoring every gameweek." },
+  { key: "luck", title: "Obtaining points by fortune", v: (m) => m.luck.total,
+    ev: (m) => `${m.luck.total} points gained through captain returns above expected and automatic substitutions${m.luck.luckiestMoment ? `, including ${m.luck.luckiestMoment.player} in GW${m.luck.luckiestMoment.gw}` : ""}.`,
+    sentence: "Placed on probation. The court expects regression to the mean and will be monitoring every gameweek." },
+  { key: "regret", title: "Reckless transferring", v: (m) => m.transfers.regret,
+    ev: (m) => `Transfers have cost ${m.transfers.regret} points against holding${m.transfers.worst ? `. Worst offence: ${m.transfers.worst.out} out for ${m.transfers.worst.in} in GW${m.transfers.worst.gw}` : ""}.`,
+    sentence: (m, gw) => `Banned from making transfers without written approval from two other managers until GW${gw + 3}.` },
+  { key: "bench", title: "Wilful neglect of points", v: (m) => m.bench.total,
+    ev: (m) => `${m.bench.total} points left on the bench${m.bench.worst ? `, including ${m.bench.worst.player} for ${m.bench.worst.pts} in GW${m.bench.worst.gw}` : ""}.`,
+    sentence: "Ordered to post his starting XI in the group chat before every deadline for four gameweeks so the court can inspect his bench." },
+  { key: "over", title: "Living beyond underlying means", v: (m) => m.over.diff,
+    ev: (m) => `Starting XI has scored ${m.over.actual} points against ${m.over.expected} expected.`,
+    sentence: "Placed on probation. The court expects regression to the mean and will be monitoring every gameweek." },
+  { key: "ai", title: "Suspected use of an unlicensed assistant", v: (m) => m.ai.score,
+    ev: (m) => `AI detection confidence of ${m.ai.score}%. ${m.ai.tells[0] || ""}`,
+    sentence: "Required to make every decision with pen and paper, unassisted, for the next three gameweeks." },
+  { key: "exBack", title: "Reconciliation with a previously sold player", v: (m) => m.exBack.count, min: 1,
+    ev: (m) => m.exBack.list.map((x) => `Sold ${x.player} in GW${x.soldGw}, bought him back in GW${x.backGw}`).join(". ") + ".",
+    sentence: "Restraining order: may not transfer in any player he has previously sold for the rest of the season." },
+  { key: "bottle", title: "Bottling a winning position", v: (m) => m.bottle.drop, min: 3,
+    ev: (m) => `Peaked at ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw}, now ${ordinal(m.bottle.now)}.`,
+    sentence: "Placed on bottle watch. Any further drop in position triggers an automatic review." },
+  { key: "chipWaste", title: "Criminal waste of a chip", v: (m) => m.chipWaste.total, min: 5,
+    ev: (m) => m.chipWaste.worst ? `${m.chipWaste.worst.text} in GW${m.chipWaste.worst.gw}.` : "",
+    sentence: "Remaining chips to be held in trust by the league until further notice." },
+  { key: "coward", title: "Captaincy cowardice", v: (m) => m.coward.pct,
+    ev: (m) => `Copied the most popular captain in ${m.coward.matches} of ${m.coward.weeks} gameweeks.`,
+    sentence: "Must captain a player owned by fewer than 10% of managers in the next gameweek." },
+];
+
+const DEFENCES = [
+  "The defence maintains the defendant was the victim of rotation, injuries and a referee with a personal grudge.",
+  "The defence argues that expected goals are not real and should not be admissible in this court.",
+  "The defence submits that the defendant was busy, had a lot on, and set his team on the bus.",
+  "The defence claims the defendant was playing the long game and the results will come.",
+];
+
+function findDefendant(managers, name) {
+  if (!name) return null;
+  const want = name.toLowerCase().trim();
+  const parts = want.split(/\s+/);
+  const last = parts[parts.length - 1];
+  return (
+    managers.find((m) => m.manager.toLowerCase().trim() === want) ||
+    managers.find((m) => m.manager.toLowerCase().includes(want)) ||
+    managers.find((m) => {
+      const n = m.manager.toLowerCase().split(/\s+/);
+      return n[0].startsWith(parts[0]) && n[n.length - 1] === last;
+    }) ||
+    managers.find((m) => m.manager.toLowerCase().split(/\s+/).includes(last)) ||
+    null
+  );
+}
+
+export function buildCourt(managers, name, gw) {
+  const m = findDefendant(managers, name);
+  if (!m) return { found: false, name };
+  const n = managers.length;
+  const ranked = OFFENCES.map((o) => {
+    const sorted = [...managers].sort((a, b) => o.v(b) - o.v(a));
+    const rank = sorted.findIndex((x) => x.id === m.id) + 1;
+    return { o, rank, value: o.v(m) };
+  }).filter((r) => r.value >= (r.o.min ?? -Infinity));
+  ranked.sort((a, b) => a.rank - b.rank);
+  let counts = ranked.filter((r) => r.rank <= Math.ceil(n / 3));
+  if (counts.length < 2) counts = ranked.slice(0, 2);
+  counts = counts.slice(0, 6);
+
+  const surname = m.manager.split(" ").slice(-1)[0];
+  const guilty = counts.filter((c) => c.rank <= Math.ceil(n / 4)).length;
+  const votes = clamp(Math.round(7 + guilty * 1.2 + m.fraud.prob / 30), 8, 12);
+  const outcome = votes >= 10 ? "Guilty" : votes >= 7 ? "Guilty by majority verdict" : "Hung jury";
+  const worst = counts[0];
+  const sentence = typeof worst.o.sentence === "function" ? worst.o.sentence(m, gw) : worst.o.sentence;
+
+  const prosecution = `The prosecution will show that between GW1 and GW${gw} the defendant, ${m.manager}, manager of ${m.team}, ` +
+    `committed ${counts.length} offences against this league. He currently sits ${ordinal(m.rank)} on ${m.total} points. ` +
+    (m.fraud.prob >= 40
+      ? `The detection model rates the likelihood of his position collapsing at ${m.fraud.prob}%.`
+      : `The court will hear evidence on each count in turn.`);
+
+  const record = m.career.seasons.length
+    ? m.career.seasons.map((x) => ({ season: x.season, rank: x.rank, points: x.points }))
+    : [];
+
+  return {
+    found: true,
+    id: m.id,
+    name: m.manager,
+    surname,
+    team: m.team,
+    rank: m.rank,
+    total: m.total,
+    gw,
+    caseNo: `FPL/${gw}/${String(m.id).slice(-5)}`,
+    counts: counts.map((c, i) => ({
+      no: i + 1,
+      title: c.o.title,
+      key: c.o.key,
+      rankInLeague: c.rank,
+      evidence: c.o.ev(m).trim().replace(/\s+\./g, ".").replace(/([^.])$/, "$1."),
+      finding: c.rank <= Math.ceil(n / 4) ? "Guilty" : "Proven on the balance of probabilities",
+    })),
+    prosecution,
+    defence: DEFENCES[m.id % DEFENCES.length],
+    jury: { guilty: votes, total: 12 },
+    outcome,
+    sentence,
+    summing: outcome === "Hung jury"
+      ? `The jury could not reach a verdict. Mr ${surname} is released pending further evidence, which the court fully expects to arrive.`
+      : `Having considered the evidence, the jury finds Mr ${surname} ${outcome.toLowerCase()}. The court notes the defendant showed no remorse.`,
+    record,
+    nextHearing: gw + 1,
+  };
 }
 
 // CLI
@@ -365,6 +548,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   raw.fixtureLookahead = config.fixtureLookahead;
   const out = score(raw);
   out.meta.siteTitle = config.siteTitle;
+  out.court = buildCourt(out.managers, config.defendant, out.meta.gw);
   await mkdir(new URL("../site/", import.meta.url), { recursive: true });
   await writeFile(new URL("../site/data.json", import.meta.url), JSON.stringify(out));
   console.log(`Scored ${out.managers.length} managers up to GW${out.meta.gw} -> site/data.json`);

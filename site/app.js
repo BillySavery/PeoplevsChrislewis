@@ -11,33 +11,57 @@ const CHIPS = { wildcard: "Wildcard", freehit: "Free Hit", bboost: "Bench Boost"
 const INDEXES = [
   {
     key: "fraud", label: "Fraud probability", unit: "%",
-    desc: "Chance this manager slides down the table over the next few gameweeks. Blends overperformance, luck, upcoming fixtures, recent form and how their position compares with their record from previous seasons.",
+    desc: "Probability this manager falls significantly down the table over the next four gameweeks. The model weighs overperformance against expected goals, luck, upcoming fixture difficulty, recent form and where their record from previous seasons says they should be.",
     value: (m) => m.fraud.prob, show: (m) => `${m.fraud.prob}%`,
-    detail: (m) => m.fraud.reasons[0] || "Nothing suspicious. For now.",
+    detail: (m) => m.fraud.reasons[0] || "No significant risk factors detected",
   },
   {
     key: "luck", label: "Lucky bastard index", unit: "pts",
-    desc: "Points gained from captains outscoring their expected goals and assists, plus points rescued by automatic substitutes coming off the bench.",
+    desc: "Points gained from captains outscoring their expected goals and assists, plus points rescued by automatic substitutions. Measures how much of a score came from fortune rather than decisions.",
     value: (m) => m.luck.total, show: (m) => m.luck.total,
     detail: (m) => m.luck.luckiestMoment ? `${m.luck.luckiestMoment.player} captain in GW${m.luck.luckiestMoment.gw}: ${m.luck.luckiestMoment.pts} pts from ${m.luck.luckiestMoment.xpts} expected` : "No captain data",
   },
   {
     key: "regret", label: "Transfer regret", unit: "pts", diverge: true,
-    desc: "Points lost by transferring, compared with keeping the player they sold, from the week of the move until the new player was sold again. Points hits are included. Positive means they would have been better off doing nothing.",
+    desc: "Points lost by transferring compared with keeping the player sold, tracked from the week of the move until the new player was sold again. Points hits included. A positive score means they would have been better off doing nothing.",
     value: (m) => m.transfers.regret, show: (m) => fmt(m.transfers.regret),
     detail: (m) => m.transfers.worst ? `Worst: ${m.transfers.worst.out} out, ${m.transfers.worst.in} in (GW${m.transfers.worst.gw}, ${fmt(m.transfers.worst.gain)})` : "No transfers made",
   },
   {
     key: "bench", label: "Benchwarmer crimes", unit: "pts",
-    desc: "Total points left on the bench this season. Bench Boost weeks are excused.",
+    desc: "Total points left on the bench this season, excluding Bench Boost weeks.",
     value: (m) => m.bench.total, show: (m) => m.bench.total,
     detail: (m) => m.bench.worst ? `Benched ${m.bench.worst.player} for ${m.bench.worst.pts} in GW${m.bench.worst.gw}` : "Clean record",
   },
   {
     key: "over", label: "Overachiever alert", unit: "pts", diverge: true,
-    desc: "Actual points from their starting XI minus what the same players would have scored if goals and assists matched their expected goals and assists. High numbers mean finishing luck that tends not to last.",
+    desc: "Actual points from the starting XI minus what the same players would have scored if goals and assists matched expected goals and assists. Large positive numbers indicate finishing luck, which historically does not last.",
     value: (m) => m.over.diff, show: (m) => fmt(m.over.diff),
     detail: (m) => `${m.over.actual} actual from ${m.over.expected} expected`,
+  },
+  {
+    key: "exBack", label: "Ex back syndrome", unit: "",
+    desc: "Players bought back after previously being sold. Repeat offenders and anyone paying more the second time round rank highest.",
+    value: (m) => m.exBack.count * 100 + m.exBack.list.reduce((a, x) => a + x.paid - x.soldFor, 0), show: (m) => m.exBack.count,
+    detail: (m) => m.exBack.list.length ? m.exBack.list.map((x) => `${x.player} (sold GW${x.soldGw}, back GW${x.backGw})`).join(", ") : "No reconciliations on record",
+  },
+  {
+    key: "bottle", label: "Bottle job index", unit: "",
+    desc: "Places dropped from their highest league position since gameweek 3. Early season positions are ignored as noise.",
+    value: (m) => m.bottle.drop * 100 - m.bottle.peak, show: (m) => m.bottle.drop,
+    detail: (m) => m.bottle.peakGw ? `Peaked ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw}, now ${ordinal(m.bottle.now)}` : "Not enough gameweeks yet",
+  },
+  {
+    key: "chipWaste", label: "Chip waster", unit: "pts",
+    desc: "Points short of a reasonable return on each chip played. Benchmarks: Triple Captain 10 extra points, Bench Boost 12 bench points, Free Hit 10 above the league average, Wildcard 5 a week above the league average over the following three gameweeks.",
+    value: (m) => m.chipWaste.total, show: (m) => m.chipWaste.total,
+    detail: (m) => m.chipWaste.worst ? `${m.chipWaste.worst.text} (GW${m.chipWaste.worst.gw})` : "No chips played yet",
+  },
+  {
+    key: "coward", label: "Captain coward", unit: "%",
+    desc: "Share of gameweeks they captained the most popular captain in the whole game that week instead of backing their own judgement.",
+    value: (m) => m.coward.pct * 100 + m.coward.matches, show: (m) => `${m.coward.pct}%`,
+    detail: (m) => `Followed the crowd in ${m.coward.matches} of ${m.coward.weeks} gameweeks`,
   },
   {
     key: "ai", label: "AI suspicion", unit: "%",
@@ -54,6 +78,10 @@ const CHARGES = [
   { key: "bench", text: "Worst benchwarmer", val: (m) => `${m.bench.total} pts` },
   { key: "over", text: "Biggest overachiever", val: (m) => `${fmt(m.over.diff)} pts` },
   { key: "ai", text: "Most likely using AI", val: (m) => `${m.ai.score}%` },
+  { key: "exBack", text: "Ex back syndrome", val: (m) => `${m.exBack.count} buy back${m.exBack.count === 1 ? "" : "s"}` },
+  { key: "bottle", text: "Biggest bottle job", val: (m) => `${m.bottle.drop} places` },
+  { key: "chipWaste", text: "Chip waster", val: (m) => `${m.chipWaste.total} pts` },
+  { key: "coward", text: "Captain coward", val: (m) => `${m.coward.pct}%` },
 ];
 
 let data;
@@ -68,9 +96,14 @@ async function init() {
   data = await res.json();
   const { meta } = data;
   document.title = `${meta.siteTitle || "FPL Fraud Detector"}: ${meta.leagueName}`;
-  $("#sub").textContent = `${meta.leagueName}. Case files updated after gameweek ${meta.gw}.`;
+  $("#sub").textContent = `Automated integrity analysis for ${meta.leagueName}. Data current to gameweek ${meta.gw}.`;
+  if (data.court?.found) {
+    const a = $("#court-link");
+    a.hidden = false;
+    a.querySelector("span").textContent = `Now in session: The People v ${data.court.name}`;
+  }
   $("#demo").hidden = !meta.demo;
-  $("#foot").textContent = `League ${meta.leagueId}. Last refreshed ${new Date(meta.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}. Not affiliated with the Premier League.`;
+  $("#foot").textContent = `League ${meta.leagueId}. Detection model 2.4. Last analysed ${new Date(meta.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}. Not affiliated with the Premier League.`;
   renderLineup();
   renderCharges();
   renderTabs();
@@ -186,7 +219,7 @@ function openDossier(id) {
   if (!m) return;
   const dlg = $("#dossier");
   const hot = m.fraud.prob >= 60;
-  const stamp = m.fraud.prob >= 70 ? "Certified fraud" : m.fraud.prob >= 50 ? "Under investigation" : m.fraud.prob >= 25 ? "Person of interest" : "Cleared";
+  const stamp = m.fraud.prob >= 70 ? "Fraud confirmed" : m.fraud.prob >= 50 ? "Under investigation" : m.fraud.prob >= 25 ? "Person of interest" : "Cleared";
   const seasons = m.career.seasons;
   const txRows = [m.transfers.best, m.transfers.worst].filter(Boolean);
   const caps = [...(m.luck.captainLog || [])].sort((a, b) => a.gw - b.gw);
@@ -209,6 +242,10 @@ function openDossier(id) {
         <div><dt>Transfer regret</dt><dd>${fmt(m.transfers.regret)}<small>${m.transfers.count} transfers, ${m.transfers.hits} pts in hits</small></dd></div>
         <div><dt>Benchwarmer crimes</dt><dd>${m.bench.total}<small>points left on the bench</small></dd></div>
         <div><dt>Overachiever alert</dt><dd>${fmt(m.over.diff)}<small>${m.over.actual} actual, ${m.over.expected} expected</small></dd></div>
+        <div><dt>Ex back syndrome</dt><dd>${m.exBack.count}<small>players bought back</small></dd></div>
+        <div><dt>Bottle job index</dt><dd>${m.bottle.drop}<small>${m.bottle.peakGw ? `peaked ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw}` : "places dropped"}</small></dd></div>
+        <div><dt>Chip waster</dt><dd>${m.chipWaste.total}<small>points short on chips</small></dd></div>
+        <div><dt>Captain coward</dt><dd>${m.coward.pct}%<small>${m.coward.matches} of ${m.coward.weeks} weeks with the crowd</small></dd></div>
         <div><dt>AI suspicion</dt><dd>${m.ai.score}%<small>detection confidence</small></dd></div>
       </dl>
     </div>
@@ -223,17 +260,23 @@ function openDossier(id) {
       ${seasons.length ? `<table class="mini-table"><thead><tr><th>Season</th><th class="num">Points</th><th class="num">Overall rank</th></tr></thead><tbody>
         ${seasons.map((s) => `<tr><td>${esc(s.season)}</td><td class="num">${s.points}</td><td class="num">${rankFmt(s.rank)}</td></tr>`).join("")}
       </tbody></table><p class="note">Best ever finish ${rankFmt(m.career.best)}. Typical finish ${rankFmt(m.career.median)}.</p>`
-      : `<p class="note">No previous seasons. A brand new account, which is exactly what someone with a secret AI helper would have.</p>`}
+      : `<p class="note">No previous seasons on record. Accounts with no history are a common feature of AI assisted teams.</p>`}
     </div>
     ${txRows.length ? `<div class="dossier-section"><h4>Transfer highlights</h4><table class="mini-table"><thead><tr><th>GW</th><th>Out</th><th>In</th><th class="num">Net</th></tr></thead><tbody>
       ${txRows.map((t) => `<tr><td>${t.gw}</td><td>${esc(t.out)}</td><td>${esc(t.in)}</td><td class="num">${fmt(t.gain)}</td></tr>`).join("")}
     </tbody></table>${m.transfers.hitRate != null ? `<p class="note">${m.transfers.hitRate}% of their transfers outscored the player they sold.</p>` : ""}</div>` : ""}
+    ${m.chipWaste.uses.length ? `<div class="dossier-section"><h4>Chip record</h4><table class="mini-table"><thead><tr><th>GW</th><th>Chip</th><th>Outcome</th><th class="num">Wasted</th></tr></thead><tbody>
+      ${m.chipWaste.uses.map((c) => `<tr><td>${c.gw}</td><td>${CHIPS[c.name] || c.name}</td><td>${esc(c.text)}</td><td class="num">${c.waste}</td></tr>`).join("")}
+    </tbody></table></div>` : ""}
+    ${m.exBack.list.length ? `<div class="dossier-section"><h4>Ex back syndrome</h4><table class="mini-table"><thead><tr><th>Player</th><th>Sold</th><th>Back</th><th class="num">Price change</th></tr></thead><tbody>
+      ${m.exBack.list.map((x) => `<tr><td>${esc(x.player)}</td><td>GW${x.soldGw} at £${x.soldFor.toFixed(1)}m</td><td>GW${x.backGw} at £${x.paid.toFixed(1)}m</td><td class="num">${x.paid - x.soldFor >= 0 ? "+" : ""}£${(x.paid - x.soldFor).toFixed(1)}m</td></tr>`).join("")}
+    </tbody></table></div>` : ""}
     ${caps.length ? `<div class="dossier-section"><h4>Captaincy record</h4><table class="mini-table"><thead><tr><th>GW</th><th>Captain</th><th class="num">Points</th><th class="num">Luck</th></tr></thead><tbody>
       ${caps.map((c) => `<tr><td>${c.gw}</td><td>${esc(c.player)}</td><td class="num">${c.pts}</td><td class="num">${fmt(c.luck)}</td></tr>`).join("")}
     </tbody></table></div>` : ""}
     <div class="dossier-section">
-      <h4>AI suspicion tells</h4>
-      ${m.ai.tells.length ? `<ul class="reasons">${m.ai.tells.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p class="note">No tells. Seems to be making their own mistakes.</p>`}
+      <h4>AI usage indicators</h4>
+      ${m.ai.tells.length ? `<ul class="reasons">${m.ai.tells.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p class="note">No indicators detected. Decisions appear to be the manager's own.</p>`}
       ${m.chips.length ? `<p class="note">Chips played: ${m.chips.map((c) => `${CHIPS[c.name] || c.name} (GW${c.gw})`).join(", ")}.</p>` : ""}
       <p class="note"><a class="ext" href="https://fantasy.premierleague.com/entry/${m.id}/event/${data.meta.gw}" target="_blank" rel="noopener">See their team on the FPL site</a></p>
     </div>`;

@@ -103,7 +103,7 @@ function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
 // Managers
 const managerNames = [
-  "Mo Ahmed", "Danny Cole", "Marcus Reid", "Jordan Hale", "Chris Abbott", "Ryan Walsh", "Liam Foster",
+  "Mo Ahmed", "Danny Cole", "Marcus Reid", "Jordan Hale", "Chris Lewis", "Ryan Walsh", "Liam Foster",
   "Kieran Moss", "Sam Okafor", "Jamie Knight", "Tom Barnes", "Lewis Grant", "Callum Drew", "Josh Ellis",
   "Aaron Price", "Nathan Quinn", "Ben Tate", "Harry Lowe", "Adam Wells", "Dean York",
 ];
@@ -158,9 +158,12 @@ managerNames.forEach((name, i) => {
         const type = players(out).element_type;
         const pool = elements.filter((e) => e.element_type === type && !squad.includes(e.id));
         const sorted = [...pool].sort((a, b) => b.quality + (aiLike ? 0.5 : rand()) - (a.quality + (aiLike ? 0.5 : rand())));
-        const inn = sorted[ri(0, aiLike ? 2 : 8)].id;
+        let inn = sorted[ri(0, aiLike ? 2 : 8)].id;
+        // Sometimes buy back someone they sold earlier
+        const exes = transfers.map((t) => t.element_out).filter((id) => players(id).element_type === type && !squad.includes(id));
+        if (exes.length && rand() < 0.18) inn = choice(exes);
         squad[outIdx] = inn;
-        transfers.push({ element_in: inn, element_out: out, event: gw, element_in_cost: 0, element_out_cost: 0, time: "" });
+        transfers.push({ element_in: inn, element_out: out, event: gw, element_in_cost: players(inn).now_cost + ri(0, 3), element_out_cost: players(out).now_cost, time: "" });
       }
       if (n === 2 && !aiLike && rand() < 0.5 && chipPlan[gw] !== "wildcard") cost = 4;
     }

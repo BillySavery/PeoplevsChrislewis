@@ -36,7 +36,7 @@ jobs:
         run: node scripts/score.mjs data/raw.json
 
       - name: Stamp files so phones load the latest version
-        run: sed -i "s/__BUILD__/${{ github.run_id }}/g" site/index.html
+        run: sed -i "s/__BUILD__/${{ github.run_id }}/g" site/index.html site/court.html
 
       - uses: actions/configure-pages@v5
 
