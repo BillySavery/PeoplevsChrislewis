@@ -7,6 +7,7 @@ const ordinal = (n) => {
 };
 const rankFmt = (r) => (r == null ? "n/a" : r >= 1e6 ? `${(r / 1e6).toFixed(2)}m` : r >= 1e3 ? `${Math.round(r / 1e3)}k` : r);
 const CHIPS = { wildcard: "Wildcard", freehit: "Free Hit", bboost: "Bench Boost", "3xc": "Triple Captain", manager: "Assistant Manager" };
+const CHIP_SHORT = { wildcard: "WC", freehit: "FH", bboost: "BB", "3xc": "TC", manager: "AM" };
 
 const INDEXES = [
   {
@@ -73,6 +74,7 @@ const INDEXES = [
 
 const CHARGES = [
   { key: "forfeit", text: "Favourite for the forfeit", val: (m) => `${m.forfeit.last}%` },
+  { key: "hoarder", text: "Chip hoarder", val: (m) => `${m.chipBank.available} unused` },
   { key: "fraud", text: "Most likely to collapse", val: (m) => `${m.fraud.prob}%` },
   { key: "luckiest", idx: "luck", text: "Luckiest bastard", val: (m) => `${m.luck.total} pts` },
   { key: "regret", text: "Most transfer regret", val: (m) => `${fmt(m.transfers.regret)} pts` },
@@ -108,6 +110,7 @@ async function init() {
   renderLineup();
   renderCharges();
   renderForfeit();
+  renderChips();
   renderTabs();
   renderTable();
   renderMethod();
@@ -186,6 +189,56 @@ function renderForfeit() {
   };
   $("#favourite").onclick = open;
   $("#forfeit-table tbody").onclick = open;
+}
+
+function renderChips() {
+  const w = data.meta.chipWindows;
+  const sec = $(".chips-left");
+  if (!w || !data.managers[0]?.chipBank) { sec.hidden = true; return; }
+  const names = w.names;
+  const cur = w.current;
+  const inWindow = (s) => cur && s.start === cur.start && s.stop === cur.stop;
+  const n = names.length;
+  const later = w.windows.find((x) => cur && x.start > cur.stop);
+
+  $("#chips-intro").textContent = cur
+    ? `Chips for gameweeks ${cur.start} to ${cur.stop} have to be played by the GW${cur.stop} deadline or they are lost for good. ${w.gwsLeftInWindow === 1 ? "This is the last gameweek" : `${w.gwsLeftInWindow} gameweeks left`} to use them.`
+    : "No chips can be played right now.";
+
+  const full = data.managers.filter((m) => m.chipBank.available === n).length;
+  const empty = data.managers.filter((m) => m.chipBank.available === 0).length;
+  const lost = data.managers.filter((m) => m.chipBank.expired > 0).length;
+  const stat = (num, text) => `<li><strong>${num}</strong><span>${text}</span></li>`;
+  $("#chip-summary").innerHTML = [
+    stat(full, `${full === 1 ? "manager has" : "managers have"} all ${n} still to play`),
+    stat(empty, `${empty === 1 ? "manager has" : "managers have"} nothing left this half`),
+    lost ? stat(lost, `${lost === 1 ? "manager let a chip" : "managers let chips"} expire unused`) : "",
+  ].join("");
+
+  $("#chip-table thead").innerHTML = `<tr><th scope="col">Manager</th>${names.map((c) =>
+    `<th scope="col" class="chip-col"><span class="long">${CHIPS[c] || c}</span><span class="short" aria-hidden="true">${CHIP_SHORT[c] || c}</span></th>`).join("")}<th scope="col" class="num">Left</th></tr>`;
+
+  const rows = [...data.managers].sort((a, b) => b.chipBank.available - a.chipBank.available || a.rank - b.rank);
+  const cell = (s) => {
+    if (!s) return `<td class="chip-col"><span class="pill none">n/a</span></td>`;
+    if (s.state === "available") return `<td class="chip-col"><span class="pill ready">Ready</span></td>`;
+    if (s.state === "used") return `<td class="chip-col"><span class="pill used">GW${s.gw}</span></td>`;
+    if (s.state === "expired") return `<td class="chip-col"><span class="pill lost">Lost</span></td>`;
+    return `<td class="chip-col"><span class="pill later">GW${s.start}</span></td>`;
+  };
+  $("#chip-table tbody").innerHTML = rows.map((m) => {
+    const slots = m.chipBank.slots.filter(inWindow);
+    return `<tr data-id="${m.id}">
+      <td class="mgr"><button>${avatar(m)}<span class="team">${esc(m.team)}</span><span class="person">${esc(m.manager)}, ${ordinal(m.rank)}</span></button></td>
+      ${names.map((c) => cell(slots.find((s) => s.name === c))).join("")}
+      <td class="num">${m.chipBank.available}</td>
+    </tr>`;
+  }).join("");
+  $("#chip-table tbody").onclick = (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (tr) openDossier(+tr.dataset.id);
+  };
+  $("#chips-note").textContent = `Ready (a yellow dot on phones) means the chip can still be played. A gameweek number shows when it was used.${later ? ` Every manager gets a fresh set from GW${later.start}.` : ""} Updated after every gameweek.`;
 }
 
 function renderTabs() {
@@ -282,6 +335,7 @@ function openDossier(id) {
         <div><dt>Transfer regret</dt><dd>${fmt(m.transfers.regret)}<small>${m.transfers.count} transfers, ${m.transfers.hits} pts in hits</small></dd></div>
         <div><dt>Benchwarmer crimes</dt><dd>${m.bench.total}<small>points left on the bench</small></dd></div>
         <div><dt>Overachiever alert</dt><dd>${fmt(m.over.diff)}<small>${m.over.actual} actual, ${m.over.expected} expected</small></dd></div>
+        <div><dt>Chips left</dt><dd>${m.chipBank.available}<small>${m.chipBank.availableNames.length ? m.chipBank.availableNames.map((c) => CHIPS[c] || c).join(", ") : "none this half"}</small></dd></div>
         <div><dt>Forfeit odds</dt><dd>${m.forfeit.last}%<small>chance of finishing last, projected ${m.forfeit.projTotal} pts</small></dd></div>
         <div><dt>Ex back syndrome</dt><dd>${m.exBack.count}<small>players bought back</small></dd></div>
         <div><dt>Bottle job index</dt><dd>${m.bottle.drop}<small>${m.bottle.peakGw ? `peaked ${ordinal(m.bottle.peak)} in GW${m.bottle.peakGw}` : "places dropped"}</small></dd></div>

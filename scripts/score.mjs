@@ -359,6 +359,7 @@ export function score(raw) {
   });
 
   forecast(managers, lastGw);
+  chipStatus(managers, entries, bootstrap, lastGw);
   for (const m of managers) m.verdict = verdict(m, managers);
 
   const by = (fn, dir = -1) => [...managers].sort((a, b) => dir * (fn(a) - fn(b)))[0];
@@ -374,6 +375,7 @@ export function score(raw) {
     chipWaste: pick(by((m) => m.chipWaste.total)),
     coward: pick(by((m) => m.coward.pct * 100 + m.coward.matches)),
     forfeit: pick(by((m) => m.forfeit.last * 1000 - m.forfeit.projTotal)),
+    hoarder: pick(by((m) => m.chipBank.available * 100 + m.rank)),
   };
 
   return {
@@ -385,6 +387,7 @@ export function score(raw) {
       fetchedAt: raw.fetchedAt,
       demo: !!raw.demo,
       nextGws: [...nextGws],
+      chipWindows: chipWindows(bootstrap, lastGw),
     },
     awards,
     managers,
@@ -458,6 +461,64 @@ function forecast(managers, lastGw, seasonLength = 38, sims = 20000) {
   const sortedProj = [...managers].sort((a, b) => a.forfeit.projTotal - b.forfeit.projTotal);
   const safety = sortedProj[1]?.forfeit.projTotal ?? 0;
   for (const m of managers) m.forfeit.gapToSafety = m.forfeit.projTotal - safety;
+}
+
+// ---------- Chips left ----------
+const CHIP_ORDER = ["wildcard", "freehit", "bboost", "3xc", "manager"];
+
+// FPL publishes the chip rules (which chips exist and when each can be played).
+// Fall back to the current rules, two of each with one set per half, if missing.
+function chipRules(bootstrap) {
+  const list = (bootstrap.chips || []).filter((c) => c.name);
+  if (list.length) return list;
+  return ["wildcard", "freehit", "bboost", "3xc"].flatMap((name) => [
+    { name, number: 1, start_event: 1, stop_event: 19 },
+    { name, number: 2, start_event: 20, stop_event: 38 },
+  ]);
+}
+
+// The first gameweek whose deadline hasn't passed yet
+function upcomingGw(bootstrap, lastGw) {
+  const next = (bootstrap.events || []).find((e) => e.is_next);
+  if (next) return next.id;
+  const cur = (bootstrap.events || []).find((e) => e.is_current);
+  return cur ? cur.id + 1 : lastGw + 1;
+}
+
+function chipWindows(bootstrap, lastGw) {
+  const rules = chipRules(bootstrap);
+  const nextGw = upcomingGw(bootstrap, lastGw);
+  const windows = [...new Map(rules.map((r) => [`${r.start_event}-${r.stop_event}`, { start: r.start_event, stop: r.stop_event }])).values()]
+    .sort((a, b) => a.start - b.start);
+  const current = windows.find((w) => nextGw >= w.start && nextGw <= w.stop) || null;
+  const names = [...new Set(rules.map((r) => r.name))].sort((a, b) => CHIP_ORDER.indexOf(a) - CHIP_ORDER.indexOf(b));
+  return { windows, current, nextGw, names, gwsLeftInWindow: current ? current.stop - nextGw + 1 : 0 };
+}
+
+function chipStatus(managers, entries, bootstrap, lastGw) {
+  const rules = chipRules(bootstrap);
+  const nextGw = upcomingGw(bootstrap, lastGw);
+  for (const m of managers) {
+    const played = (entries[m.id]?.history?.chips || []).map((c) => ({ name: c.name, gw: c.event, claimed: false }));
+    const slots = rules
+      .slice()
+      .sort((a, b) => a.start_event - b.start_event)
+      .map((r) => {
+        const use = played.find((p) => !p.claimed && p.name === r.name && p.gw >= r.start_event && p.gw <= r.stop_event);
+        if (use) use.claimed = true;
+        const state = use ? "used" : nextGw > r.stop_event ? "expired" : nextGw < r.start_event ? "later" : "available";
+        return { name: r.name, start: r.start_event, stop: r.stop_event, state, gw: use?.gw ?? null };
+      });
+    const live = slots.filter((s) => s.state === "available");
+    m.chipBank = {
+      slots,
+      available: live.length,
+      remaining: slots.filter((s) => s.state === "available" || s.state === "later").length,
+      expired: slots.filter((s) => s.state === "expired").length,
+      availableNames: live.map((s) => s.name),
+      nextDeadline: live.length ? Math.min(...live.map((s) => s.stop)) : null,
+    };
+  }
 }
 
 function pick(m) {
@@ -643,6 +704,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const fav = [...out.managers].sort((a, b) => b.forfeit.last - a.forfeit.last).slice(0, 3);
     console.log(`::notice title=Forfeit::${fav.map((m) => `${m.manager} ${m.forfeit.last}%`).join(", ")}`);
     console.log(`::notice title=Mugshots::${photoMatches.join("; ") || "none configured"}`);
+    const w = out.meta.chipWindows;
+    console.log(`::notice title=Chips::Next GW${w.nextGw}, window ${w.current ? `GW${w.current.start}-${w.current.stop}` : "none"}. ` +
+      out.managers.map((m) => `${m.manager}: ${m.chipBank.available}`).join(", "));
     console.log(`::notice title=League::${out.meta.leagueName}, ${out.managers.length} managers, GW${out.meta.gw}.`);
   }
 }

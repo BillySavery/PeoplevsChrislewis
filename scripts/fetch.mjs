@@ -97,10 +97,14 @@ const slimBootstrap = {
     name: e.name,
     finished: e.finished,
     is_current: e.is_current,
+    is_next: e.is_next,
     deadline_time: e.deadline_time,
     average_entry_score: e.average_entry_score,
     highest_score: e.highest_score,
     most_captained: e.most_captained,
+  })),
+  chips: (bootstrap.chips || []).map((c) => ({
+    id: c.id, name: c.name, number: c.number, start_event: c.start_event, stop_event: c.stop_event,
   })),
   teams: bootstrap.teams.map((t) => ({ id: t.id, name: t.name, short_name: t.short_name })),
   elements: bootstrap.elements.map((p) => ({

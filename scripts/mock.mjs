@@ -82,6 +82,10 @@ const mins = (id, gw) => live[gw][id - 1].s.minutes;
 for (const e of elements) e.total_points = Array.from({ length: LAST_GW }, (_, i) => pts(e.id, i + 1)).reduce((a, b) => a + b, 0);
 
 // Most captained each week = highest owned attacker that week
+const chipRules = ["wildcard", "freehit", "bboost", "3xc"].flatMap((name, k) => [
+  { id: k * 2 + 1, name, number: 1, start_event: 1, stop_event: 19 },
+  { id: k * 2 + 2, name, number: 2, start_event: 20, stop_event: 38 },
+]);
 const events = Array.from({ length: 38 }, (_, i) => ({
   id: i + 1, name: `Gameweek ${i + 1}`, finished: i + 1 <= LAST_GW, is_current: i + 1 === LAST_GW,
   deadline_time: null, average_entry_score: 0, highest_score: 0, most_captained: null,
@@ -147,6 +151,7 @@ managerNames.forEach((name, i) => {
   const chipPlan = {};
   if (rand() < 0.5) chipPlan[ri(3, 8)] = "wildcard";
   if (rand() < 0.4) chipPlan[ri(2, 9)] = choice(["bboost", "3xc"]);
+  if (rand() < 0.25) { const g = ri(2, 9); if (!chipPlan[g]) chipPlan[g] = "freehit"; }
 
   for (let gw = 1; gw <= LAST_GW; gw++) {
     let cost = 0;
@@ -227,7 +232,7 @@ await writeFile(new URL("../data/raw-demo.json", import.meta.url), JSON.stringif
   leagueId: 566171,
   league: { id: 566171, name: "Demo League (dummy data)" },
   lastGw: LAST_GW,
-  bootstrap: { events, teams, elements: elements.map(({ quality, ...e }) => e) },
+  bootstrap: { events, teams, chips: chipRules, elements: elements.map(({ quality, ...e }) => e) },
   fixtures,
   standings,
   live,
