@@ -707,6 +707,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const w = out.meta.chipWindows;
     console.log(`::notice title=Chips::Next GW${w.nextGw}, window ${w.current ? `GW${w.current.start}-${w.current.stop}` : "none"}. ` +
       out.managers.map((m) => `${m.manager}: ${m.chipBank.available}`).join(", "));
+    const evs = (raw.bootstrap.events || []).filter((e) => Math.abs(e.id - raw.lastGw) <= 2).map((e) => `GW${e.id}${e.finished ? " finished" : ""}${e.is_current ? " current" : ""}${e.is_next ? " next" : ""}`);
+    console.log(`::notice title=Debug events::lastGw ${raw.lastGw}. ${evs.join(", ")}`);
+    console.log(`::notice title=Debug table::` + raw.standings.map((st) => {
+      const h = raw.entries[st.entry]?.history?.current || [];
+      const last = h[h.length - 1];
+      return `${st.player_name} r${st.rank} t${st.total} h${last?.event}:${last?.total_points}`;
+    }).join(" | "));
     console.log(`::notice title=League::${out.meta.leagueName}, ${out.managers.length} managers, GW${out.meta.gw}.`);
   }
 }
